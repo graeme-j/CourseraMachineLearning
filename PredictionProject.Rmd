@@ -1,0 +1,110 @@
+---
+title: "Prediction Assignment"
+author: "Graeme Jamieson"
+date: "April 26, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(cache=TRUE)
+```
+# Backgroud
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset).  
+  
+#Analysis  
+
+```{r results='hide', message=FALSE, warning=FALSE}
+library(caret)
+library(e1071)
+library(dplyr)
+library(knitr)
+```
+
+```{r}
+#Download the files if you do not already have them
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv","training.csv")
+#download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv","testing.csv")
+
+#Load the training and testing sets
+#testing_set <- read.csv("testing.csv", stringsAsFactors = F)
+#training_set <- read.csv("training.csv",stringsAsFactors = F)
+load("//private/PrivRoot5/grajami/Documents/Data Science/Machine Learning/CourseProject/projdata.RData")
+
+```
+
+#Pre-processing the data
+Now that we have the datasets we will take a look at the columns of the testing set to get an idea of which fields might be the best for our predictive model. First we should look at the testing set to see which columns have sufficient data to use in our model.
+
+```{r results='hide'}
+
+t <- testing_set %>% 
+      summarise_each(funs(sum(!is.na(.))))
+
+col_names <- sapply((data.frame(name = colnames(t[1, t[1,] != 0])) %>% arrange(name)), as.character)
+
+```
+```{r}
+cbind(col_names[1:20], col_names[21:40], col_names[41:60])
+```
+  
+  
+  
+After we remove the columns that have no records in the testing set a couple column types jump out. The columns that start with accel, magnet, and gyros seem to have complete data and have measurement for all 3 dimensions and so these could be good columns to build our model on. So we will use all the columns that start with these three names to build our predictive model. We can look at adding or removing columns depending on the results of our predictive model.  
+  
+  
+
+```{r}
+# Make sure the variable we are predicting is a factor variable
+training_set$classe <- factor(training_set$classe)
+
+# Create a reduced training set with only our selected columns
+train_reduced <- training_set %>% 
+                        select(
+                            starts_with('gyros')
+                            , starts_with('accel')
+                            , starts_with('magnet')
+                            , classe 
+                        )
+```
+  
+# Building our prediction model  
+Now since the testing set provided does not contain the classe variable, as it is the test for which our models are graded, we will split our training set into a training set and test set. 
+  
+  
+```{r}
+
+set.seed(123)
+inTrain = createDataPartition(train_reduced$classe, p = 3/4)[[1]]
+training = train_reduced[ inTrain,]
+testing = train_reduced[-inTrain,]
+
+```
+
+The first model we will try to fit is a random forest. We will add the train control method repeatedcv to perform a 5- fold cross validation on the training set and we will repeat this 5 times. 
+
+```{r message=FALSE}
+
+
+# fit a random forest
+tr<-trainControl(method="repeatedcv", number=5, repeats = 5)
+#fit1 <- train(classe ~., data = training, method = 'rf', trControl = tr)
+
+max(fit1$results$Accuracy)
+
+```
+
+We can see that the mean accuracy of repeated CV is listed at around 98%. We expect our out of sample error to be 1-Accuracy of our cross validation data set. So we estimate that our out of sample error is very small as our model accuracy is very good.
+
+#Testing the accuracy of the model
+```{r message='hide'}
+
+pred1 <- predict(fit1, testing)
+confusionMatrix(pred1, testing$classe)
+
+```
+We can see that after running our model on the test set we have an accuracy around 98.7%. Looking at the sensitivity and specificity within each classe we can also see that it is around 97-99% for each classe.  
+  
+I tried some other models such as svm, rda and lda as well as an ensemble of some of these models but since our original model was about 99% accurate this was mainly for fun.  
+  
+The model was then run on the test set for evaluation and it achieved a score of 20/20.  
